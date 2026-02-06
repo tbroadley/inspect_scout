@@ -128,6 +128,18 @@ def test_bool_results(
         ("Trailing text.\n\nANSWER: 42 points", 42.0, "Trailing text."),
         ("Whitespace.\n\nANSWER:  42  ", 42.0, "Whitespace."),
         ("Markdown.\n\n**ANSWER: 7**", 7.0, "Markdown."),
+        # Section header "Answer:" before the actual ANSWER line
+        (
+            "Probability is low.\n\n**Answer:**  \n\nANSWER: 0.10",
+            0.1,
+            "Probability is low.\n\nAnswer:",
+        ),
+        # "Answer" header without colon doesn't interfere
+        (
+            "Probability is high.\n\n**Answer**\n\nANSWER: 0.99",
+            0.99,
+            "Probability is high.\n\nAnswer",
+        ),
     ],
 )
 def test_number_results(

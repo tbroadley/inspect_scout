@@ -30,6 +30,11 @@ from .prompt import (
     STR_ANSWER_PROMPT,
 )
 
+# Like ANSWER_PATTERN_LINE but whitespace after the colon cannot span newlines.
+# This prevents markdown section headers like "**Answer:**" from matching across
+# line boundaries and shadowing the real "ANSWER: <value>" on a later line.
+_ANSWER_PATTERN_NUMBER = r"(?i)ANSWER\s*:[^\S\n]*([^\n]+)"
+
 
 def _strip_markdown_formatting(text: str) -> str:
     """Strip common markdown formatting from text."""
@@ -155,22 +160,30 @@ class _NumberAnswer(Answer):
         value_to_float: ValueToFloat | None = None,
     ) -> Result:
         completion = _strip_markdown_formatting(output.completion)
-        match = re.search(ANSWER_PATTERN_LINE, completion)
 
-        if match:
+        # Use _ANSWER_PATTERN_NUMBER (which prevents matching across newlines)
+        # with finditer, taking the last valid match. Models often write
+        # section headers like "Answer:" before the actual "ANSWER: <number>"
+        # line — using the standard ANSWER_PATTERN_LINE, the header's \s*
+        # bridges across newlines and shadows the real answer.
+        last_valid: tuple[re.Match[str], float] | None = None
+        for match in re.finditer(_ANSWER_PATTERN_NUMBER, completion):
             answer = _safe_str_to_float(match.group(1).strip())
-
             if answer is not None:
-                explanation = completion[: match.start()].strip()
-                references = extract_references(explanation)
-                value = answer if value_to_float is None else value_to_float(answer)
+                last_valid = (match, answer)
 
-                return Result(
-                    value=value,
-                    answer=str(answer),
-                    explanation=explanation,
-                    references=references,
-                )
+        if last_valid is not None:
+            match, answer = last_valid
+            explanation = completion[: match.start()].strip()
+            references = extract_references(explanation)
+            value = answer if value_to_float is None else value_to_float(answer)
+
+            return Result(
+                value=value,
+                answer=str(answer),
+                explanation=explanation,
+                references=references,
+            )
 
         return Result(value=False, explanation=completion)
 
